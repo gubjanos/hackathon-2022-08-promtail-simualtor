@@ -9,6 +9,10 @@ import (
 	"github.com/google/go-cmp/cmp"
 )
 
+type Inspector interface {
+	Inspect(stageName string, before *Entry, after Entry)
+}
+
 type inspector struct {
 	writer    io.Writer
 	formatter *formatter
@@ -46,7 +50,7 @@ func (f *formatter) disable() {
 	f.bold.DisableColor()
 }
 
-func (i inspector) inspect(stageName string, before *Entry, after Entry) {
+func (i inspector) Inspect(stageName string, before *Entry, after Entry) {
 	if before == nil {
 		fmt.Fprintln(i.writer, i.formatter.red.Sprintf("could not copy entry in '%s' stage; inspect aborted", stageName))
 		return

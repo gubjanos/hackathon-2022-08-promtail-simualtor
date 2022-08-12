@@ -75,7 +75,7 @@ func (entry *Entry) copy() *Entry {
 type stageProcessor struct {
 	Processor
 
-	inspector *inspector
+	inspector Inspector
 }
 
 func (s stageProcessor) Run(in chan Entry) chan Entry {
@@ -89,7 +89,7 @@ func (s stageProcessor) Run(in chan Entry) chan Entry {
 		s.Process(e.Labels, e.Extracted, &e.Timestamp, &e.Line)
 
 		if Inspect {
-			s.inspector.inspect(s.Processor.Name(), before, e)
+			s.inspector.Inspect(s.Processor.Name(), before, e)
 		}
 
 		return e
