@@ -1,0 +1,36 @@
+{
+	"info": {
+		"_postman_id": "d5df4efc-1621-49ff-9740-07e95221f9cf",
+		"name": "Simulator",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+	},
+	"item": [
+		{
+			"name": "New Request",
+			"request": {
+				"method": "POST",
+				"header": [],
+				"body": {
+					"mode": "raw",
+					"raw": "{\r\n    \"Config\": \"pipeline_stages:\\n- regex:\\n    expression: 'level=(?P<level>.*)'\\n- labels:\\n    level:\",\r\n    \"Logs\": [\"level=log1\", \"level=log2\"]\r\n}",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": {
+					"raw": "localhost:9080/simulator",
+					"host": [
+						"localhost"
+					],
+					"port": "9080",
+					"path": [
+						"simulator"
+					]
+				}
+			},
+			"response": []
+		}
+	]
+}

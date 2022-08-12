@@ -1,3 +1,4 @@
+# This config is just so start promtail. The pipeline config is provided via an api call
 server:
   http_listen_port: 9080
   grpc_listen_port: 0
@@ -10,11 +11,6 @@ clients:
 
 scrape_configs:
 - job_name: system
-  pipeline_stages:
-  - regex:
-      expression: 'level=(?P<level>[^\s-]*)'
-  - labels:
-      level:
   static_configs:
   - targets:
       - localhost

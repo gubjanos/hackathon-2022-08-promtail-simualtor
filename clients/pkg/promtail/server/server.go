@@ -1,6 +1,7 @@
 package server
 
 import (
+	"encoding/json"
 	"flag"
 	"fmt"
 	"net/http"
@@ -12,17 +13,24 @@ import (
 	"strings"
 	"syscall"
 	"text/template"
+	"time"
 
 	"github.com/felixge/fgprof"
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
 	"github.com/pkg/errors"
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/common/model"
 	"github.com/prometheus/common/version"
 	serverww "github.com/weaveworks/common/server"
+	"gopkg.in/yaml.v2"
 
+	"github.com/grafana/loki/clients/pkg/logentry/stages"
+	"github.com/grafana/loki/clients/pkg/promtail/api"
 	"github.com/grafana/loki/clients/pkg/promtail/server/ui"
 	"github.com/grafana/loki/clients/pkg/promtail/targets"
 	"github.com/grafana/loki/clients/pkg/promtail/targets/target"
+	"github.com/grafana/loki/pkg/logproto"
 )
 
 var (
@@ -104,6 +112,7 @@ func New(cfg Config, log log.Logger, tms *targets.TargetManagers, promtailCfg st
 	serv.HTTP.Path("/targets").Handler(http.HandlerFunc(serv.targets))
 	serv.HTTP.Path("/config").Handler(http.HandlerFunc(serv.config))
 	serv.HTTP.Path("/debug/fgprof").Handler(fgprof.Handler())
+	serv.HTTP.Path("/simulator").Handler(http.HandlerFunc(serv.simulator))
 	return serv, nil
 }
 
@@ -183,6 +192,91 @@ func (s *PromtailServer) config(rw http.ResponseWriter, req *http.Request) {
 		PageTitle:    "Config",
 		ExternalURL:  s.externalURL,
 	})
+}
+
+func loadConfig(yml string) stages.PipelineStages {
+	var config map[string]interface{}
+	err := yaml.Unmarshal([]byte(yml), &config)
+	if err != nil {
+		panic(err)
+	}
+	return config["pipeline_stages"].([]interface{})
+}
+
+type Request struct {
+	Config string
+	Logs   []string
+}
+
+type Response struct {
+	Line   string
+	Labels model.LabelSet
+}
+
+// Copied from a test to feed entries directly
+func withInboundEntries(entries []stages.Entry) chan stages.Entry {
+	in := make(chan stages.Entry, len(entries))
+	defer close(in)
+	for _, e := range entries {
+		in <- e
+	}
+	return in
+}
+
+// Copied from another test to create entries
+func newEntry(ex map[string]interface{}, lbs model.LabelSet, line string, ts time.Time) stages.Entry {
+	if ex == nil {
+		ex = map[string]interface{}{}
+	}
+	if lbs == nil {
+		lbs = model.LabelSet{}
+	}
+	return stages.Entry{
+		Extracted: ex,
+		Entry: api.Entry{
+			Labels: lbs,
+			Entry: logproto.Entry{
+				Timestamp: ts,
+				Line:      line,
+			},
+		},
+	}
+}
+
+func (s *PromtailServer) simulator(rw http.ResponseWriter, req *http.Request) {
+	// handling request
+	decoder := json.NewDecoder(req.Body)
+	var r Request
+	err := decoder.Decode(&r)
+	if err != nil {
+		rw.Write([]byte(err.Error()))
+	}
+
+	// Creating pipeline
+	jobname := "JaniJob"
+	jobnameptr := &jobname
+	pl, _ := stages.NewPipeline(log.NewNopLogger(), loadConfig(r.Config), jobnameptr, prometheus.DefaultRegisterer)
+
+	// Executing pipeline
+	var entries []stages.Entry
+	for _, line := range r.Logs {
+		entries = append(entries, newEntry(nil, nil, line, time.Now()))
+	}
+	out := pl.Run(withInboundEntries(entries))
+	var finalEntries []stages.Entry
+	for e := range out {
+		finalEntries = append(finalEntries, e)
+	}
+
+	// Response
+	encoder := json.NewEncoder(rw)
+
+	for _, entry := range finalEntries {
+		err := encoder.Encode(Response{Line: entry.Line, Labels: entry.Labels})
+		if err != nil {
+			fmt.Println("ajajj")
+		}
+	}
 }
 
 // targets serves the targets page.
