@@ -1,8 +1,6 @@
 package stages
 
 import (
-	"os"
-	"runtime"
 	"time"
 
 	"github.com/go-kit/log"
@@ -96,10 +94,12 @@ func (s stageProcessor) Run(in chan Entry) chan Entry {
 	})
 }
 
+var aci AccumulatingInspector
+
 func toStage(p Processor) Stage {
 	return &stageProcessor{
 		Processor: p,
-		inspector: newInspector(os.Stderr, runtime.GOOS == "windows"),
+		inspector: &aci,
 	}
 }
 
