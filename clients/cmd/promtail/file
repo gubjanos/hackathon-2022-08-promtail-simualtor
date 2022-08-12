@@ -1,0 +1,1 @@
+level=error ts=2022-08-12T07:27:50.326926659Z caller=main.go:117 msg="error creating promtail" error="at least one client config should be provided"
