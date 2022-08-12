@@ -94,12 +94,12 @@ func (s stageProcessor) Run(in chan Entry) chan Entry {
 	})
 }
 
-var aci AccumulatingInspector
+var Aci AccumulatingInspector
 
 func toStage(p Processor) Stage {
 	return &stageProcessor{
 		Processor: p,
-		inspector: &aci,
+		inspector: &Aci,
 	}
 }
 

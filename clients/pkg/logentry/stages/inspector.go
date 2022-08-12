@@ -24,6 +24,7 @@ type AccumulatingInspector struct {
 
 func (a *AccumulatingInspector) addDiff(diff Diff) {
 	a.diffs = append(a.diffs, diff)
+	fmt.Println(a)
 }
 
 func (a *AccumulatingInspector) Inspect(stageName string, before *Entry, after Entry) {
