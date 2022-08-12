@@ -13,12 +13,91 @@ type Inspector interface {
 	Inspect(stageName string, before *Entry, after Entry)
 }
 
-type inspector struct {
+type Diff struct {
+	stage string
+	diff  string
+}
+
+type AccumulatingInspector struct {
+	diffs []Diff
+}
+
+func (a *AccumulatingInspector) addDiff(diff Diff) {
+	a.diffs = append(a.diffs, diff)
+}
+
+func (a *AccumulatingInspector) Inspect(stageName string, before *Entry, after Entry) {
+	if before == nil {
+		return
+	}
+
+	r := diffReporter{}
+
+	cmp.Equal(*before, after, cmp.Reporter(&r))
+
+	diffString := r.String()
+	if strings.TrimSpace(diffString) != "" {
+		a.addDiff(Diff{stage: stageName, diff: diffString})
+	}
+}
+
+// diffReporter is a simple custom reporter that only records differences
+// detected during comparison.
+// TODO instead of creating a string, cant it create diff objects?
+type diffReporter struct {
+	path cmp.Path
+
+	diffs []string
+}
+
+func (r *diffReporter) PushStep(ps cmp.PathStep) {
+	r.path = append(r.path, ps)
+}
+
+func (r *diffReporter) Report(rs cmp.Result) {
+	if rs.Equal() {
+		return
+	}
+
+	vx, vy := r.path.Last().Values()
+
+	// TODO(dannyk): try using go-cmp to filter this condition out with Equal(), but for now this just makes it work
+	if fmt.Sprintf("%v", vx) == fmt.Sprintf("%v", vy) {
+		return
+	}
+
+	change := vx.IsValid()
+	addition := vy.IsValid()
+	removal := change && !addition
+	mod := addition && change
+
+	r.diffs = append(r.diffs, fmt.Sprintf("%#v:", r.path))
+
+	if removal {
+		r.diffs = append(r.diffs, fmt.Sprintf("\t-: %v", vx))
+	}
+	if mod {
+		r.diffs = append(r.diffs, fmt.Sprintf("\t-: %v", vx))
+	}
+	if addition {
+		r.diffs = append(r.diffs, fmt.Sprintf("\t+: %v", vy))
+	}
+}
+
+func (r *diffReporter) PopStep() {
+	r.path = r.path[:len(r.path)-1]
+}
+
+func (r *diffReporter) String() string {
+	return fmt.Sprintf("\n%s", strings.Join(r.diffs, "\n"))
+}
+
+type printlnInspector struct {
 	writer    io.Writer
 	formatter *formatter
 }
 
-func newInspector(writer io.Writer, disableFormatting bool) *inspector {
+func newInspector(writer io.Writer, disableFormatting bool) *printlnInspector {
 	f := &formatter{
 		red:    color.New(color.FgRed),
 		yellow: color.New(color.FgYellow),
@@ -30,7 +109,7 @@ func newInspector(writer io.Writer, disableFormatting bool) *inspector {
 		f.disable()
 	}
 
-	return &inspector{
+	return &printlnInspector{
 		writer:    writer,
 		formatter: f,
 	}
@@ -50,13 +129,13 @@ func (f *formatter) disable() {
 	f.bold.DisableColor()
 }
 
-func (i inspector) Inspect(stageName string, before *Entry, after Entry) {
+func (i *printlnInspector) Inspect(stageName string, before *Entry, after Entry) {
 	if before == nil {
 		fmt.Fprintln(i.writer, i.formatter.red.Sprintf("could not copy entry in '%s' stage; inspect aborted", stageName))
 		return
 	}
 
-	r := diffReporter{
+	r := formatterDiffReporter{
 		formatter: i.formatter,
 	}
 
@@ -70,9 +149,9 @@ func (i inspector) Inspect(stageName string, before *Entry, after Entry) {
 	fmt.Fprintf(i.writer, "[inspect: %s stage]: %s\n", i.formatter.bold.Sprintf("%s", stageName), diff)
 }
 
-// diffReporter is a simple custom reporter that only records differences
+// formatterDiffReporter is a simple custom reporter that only records differences
 // detected during comparison.
-type diffReporter struct {
+type formatterDiffReporter struct {
 	path cmp.Path
 
 	formatter *formatter
@@ -80,11 +159,11 @@ type diffReporter struct {
 	diffs []string
 }
 
-func (r *diffReporter) PushStep(ps cmp.PathStep) {
+func (r *formatterDiffReporter) PushStep(ps cmp.PathStep) {
 	r.path = append(r.path, ps)
 }
 
-func (r *diffReporter) Report(rs cmp.Result) {
+func (r *formatterDiffReporter) Report(rs cmp.Result) {
 	if rs.Equal() {
 		return
 	}
@@ -124,10 +203,10 @@ func (r *diffReporter) Report(rs cmp.Result) {
 	}
 }
 
-func (r *diffReporter) PopStep() {
+func (r *formatterDiffReporter) PopStep() {
 	r.path = r.path[:len(r.path)-1]
 }
 
-func (r *diffReporter) String() string {
+func (r *formatterDiffReporter) String() string {
 	return fmt.Sprintf("\n%s", strings.Join(r.diffs, "\n"))
 }
